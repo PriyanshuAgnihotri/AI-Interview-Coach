@@ -1,28 +1,39 @@
 import json
-import os
+import streamlit as st
 
-SESSION_FILE = "session_data.json"
+SESSION_KEY = "chat_history"
 
-def save_session(session_data):
+def save_session(session_data=None):
     """
-    Save session chat history to JSON file.
+    Save session chat history into st.session_state.
+    Optionally accepts a custom list to save.
     """
-    try:
-        with open(SESSION_FILE, "w") as f:
-            json.dump(session_data, f, indent=4)
-    except Exception as e:
-        print(f"Error saving session: {e}")
+    if session_data is None:
+        session_data = st.session_state.get(SESSION_KEY, [])
+    st.session_state[SESSION_KEY] = session_data
 
 def load_session():
     """
-    Load session chat history from JSON file.
-    Returns empty list if no file exists.
+    Load session chat history from st.session_state.
+    Returns empty list if not set.
     """
-    if os.path.exists(SESSION_FILE):
-        try:
-            with open(SESSION_FILE, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Error loading session: {e}")
-            return []
-    return []
+    return st.session_state.get(SESSION_KEY, [])
+
+def export_session():
+    """
+    Export session history as downloadable JSON string.
+    """
+    session_data = st.session_state.get(SESSION_KEY, [])
+    return json.dumps(session_data, indent=4)
+
+def import_session(uploaded_file):
+    """
+    Import session history from an uploaded JSON file.
+    """
+    try:
+        content = uploaded_file.read().decode("utf-8")
+        st.session_state[SESSION_KEY] = json.loads(content)
+        return True
+    except Exception as e:
+        st.error(f"Error importing session: {e}")
+        return False
