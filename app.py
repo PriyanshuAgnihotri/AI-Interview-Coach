@@ -8,9 +8,9 @@ import openai
 from voice_input import transcribe_audio
 from voice_output import text_to_speech_elevenlabs
 
-# -----------------------------
+
 # Session Manager (integrated)
-# -----------------------------
+
 SESSION_KEY = "chat"
 
 def save_session(session_data=None):
@@ -34,9 +34,7 @@ def import_session(uploaded_file):
         st.error(f"Error importing session: {e}")
         return False
 
-# -----------------------------
 # API Key Setup
-# -----------------------------
 def get_api_key():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -158,3 +156,4 @@ if uploaded:
     if import_session(uploaded):
         st.success("Session imported successfully!")
         st.rerun()
+
