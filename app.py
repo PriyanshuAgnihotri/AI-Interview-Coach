@@ -55,6 +55,44 @@ def get_api_key():
             pass
     return api_key
 
+# API Wrapper with Mock Fallback
+def generate_response(messages, max_tokens=300, temperature=0.3, mock_type="question"):
+    """Generate a response from OpenAI API or return a resume-aware mock response on error/quota issue."""
+    if client:
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            st.warning(f"⚠️ Using mock {mock_type} (API error: {e})")
+
+    # --- Mock fallback ---
+    resume_text = st.session_state.get("resume_text", "")
+    if mock_type == "feedback":
+        if resume_text and resume_text != "No resume provided.":
+            return ("MOCK FEEDBACK (Resume-aware):\n"
+                    f"- Based on your resume (e.g., {resume_text[:60]}...), your answer shows relevant experience.\n"
+                    "- Strength: You highlighted past work clearly.\n"
+                    "- Weakness: Missing measurable outcomes.\n"
+                    "- Suggestion: Add metrics like accuracy %, revenue impact, or team size.\n"
+                    "- Score: 7/10\n"
+                    "- Follow-up: How did you apply these skills in your resume project?")
+        else:
+            return ("MOCK FEEDBACK:\n"
+                    "- Good structure but missing depth.\n"
+                    "- Add specific results or numbers.\n"
+                    "- Score: 6/10\n"
+                    "- Follow-up: Can you expand on how you solved a challenge?")
+    else:  # mock question
+        if resume_text and resume_text != "No resume provided.":
+            return "MOCK QUESTION: Can you walk me through one of your resume projects and its impact?"
+        else:
+            return "MOCK QUESTION: Tell me about yourself."
+
 # Streamlit UI
 st.set_page_config(page_title="AI Interview Coach", page_icon="🎯", layout="wide")
 st.title("🎯 AI Interview Coach — Live Demo (Text + Voice)")
@@ -86,11 +124,14 @@ if resume_file:
 role = st.selectbox("Role", ["SDE", "Data Analyst", "ML Engineer", "Product Manager"], index=0, key="role")
 interview_type = st.selectbox("Interview Type", ["Behavioral", "Technical", "HR"], index=0, key="interview_type")
 
-# System Prompt Setup
+# System Prompt + First Question
 if not any(msg["role"] == "system" for msg in st.session_state[SESSION_KEY]):
     resume_context = st.session_state.get("resume_text", "No resume provided.")
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(role=role, type=interview_type) + f"\nResume Context:\n{resume_context}"
     st.session_state[SESSION_KEY].insert(0, {"role": "system", "content": system_prompt})
+
+    first_question = generate_response(st.session_state[SESSION_KEY], max_tokens=150, temperature=0.3, mock_type="question")
+    st.session_state[SESSION_KEY].append({"role": "assistant", "content": first_question})
 
 # Current Question Display
 last_msg = st.session_state[SESSION_KEY][-1]["content"] if st.session_state[SESSION_KEY] and st.session_state[SESSION_KEY][-1]["role"] == "assistant" else None
@@ -113,43 +154,14 @@ if st.button("Get Feedback"):
         st.warning("Please write or record your answer first.")
     else:
         st.session_state[SESSION_KEY].append({"role": "user", "content": user_input})
-        if client:
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=st.session_state[SESSION_KEY],
-                    max_tokens=500,
-                    temperature=0.2
-                )
-                reply = response.choices[0].message.content
-            except Exception as e:
-                reply = f"Error: {e}"
-        else:
-            reply = ("MOCK FEEDBACK:\n"
-                     "- Good start but missing metrics.\n"
-                     "- Improvements: Add numbers, clarify your role, tie to company goals.\n"
-                     "- Score: 6/10\n"
-                     "- Follow-up: What would you do differently next time?")
+        reply = generate_response(st.session_state[SESSION_KEY], max_tokens=500, temperature=0.2, mock_type="feedback")
         st.session_state[SESSION_KEY].append({"role": "assistant", "content": reply})
         st.rerun()
 
 # Next Question Button
 if st.button("Next Question"):
     st.session_state[SESSION_KEY].append({"role": "user", "content": "Please ask the next interview question."})
-    if client:
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=st.session_state[SESSION_KEY],
-                max_tokens=150,
-                temperature=0.3
-            )
-            next_q = response.choices[0].message.content
-        except Exception as e:
-            next_q = f"Error: {e}"
-    else:
-        next_q = "MOCK QUESTION: Tell me about a time you handled conflicting priorities."
-
+    next_q = generate_response(st.session_state[SESSION_KEY], max_tokens=150, temperature=0.3, mock_type="question")
     st.session_state[SESSION_KEY].append({"role": "assistant", "content": next_q})
 
     try:
